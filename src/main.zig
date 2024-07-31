@@ -2,9 +2,11 @@ const std = @import("std");
 const rl = @import("raylib");
 
 // Random Generator
-const SEED = 42;
-var rand_prng = std.Random.DefaultPrng.init(SEED);
-const rand_gen = rand_prng.random();
+fn curr_time() u64 {
+    return @as(u64, @intCast(std.time.milliTimestamp()));
+}
+var rand_prng: std.Random.Xoshiro256 = undefined;
+var rand_gen: std.Random = undefined;
 
 // Constants
 const COLS = 10;
@@ -12,6 +14,7 @@ const ROWS = 20;
 const HIDDEN_ROWS = 2;
 const TOTAL_ROWS = ROWS + HIDDEN_ROWS;
 const SQUARE_SIZE = 40;
+const GUI_SIZE = 300;
 
 const Square = [2]i32;
 
@@ -41,6 +44,7 @@ const Piece = struct {
     kind: PieceKind,
     squares: [4]Square,
 
+    /// Returns the column index of most left square of the Piece
     pub fn left_square(self: Piece) i32 {
         var min_col: i32 = 100;
         for (self.squares) |square| {
@@ -51,6 +55,7 @@ const Piece = struct {
         return min_col;
     }
 
+    /// Returns the column index of most right square of the Piece
     pub fn right_square(self: Piece) i32 {
         var max_col: i32 = 0;
         for (self.squares) |square| {
@@ -61,6 +66,7 @@ const Piece = struct {
         return max_col;
     }
 
+    /// Rotate the piece clockwise or counterclockwise based on direction (1.0 or -1.0)
     pub fn rotate(self: *Piece, direction: f32, game: Game) void {
         const DEGREE = direction * std.math.pi / 2.0;
         const origin: Square = self.squares[1];
@@ -92,18 +98,23 @@ const Direction = enum {
     Right,
 };
 
+/// Struct to represent a single square in the Board. If a square is active and its type (for color)
 const Slot = struct {
     active: bool,
     type: ?PieceKind,
 };
 
+/// 2D array to represent the Board
 const Board = [TOTAL_ROWS][COLS]Slot;
 
+/// Struct to represent the Game state
 const Game = struct {
     board: Board,
     active_piece: Piece,
     next_piece: Piece,
+    destroyed_lines: u32,
 
+    /// Initialize the Game state with all empty slots
     pub fn init() Game {
         var board: Board = undefined;
         for (board, 0..) |rows, row| {
@@ -118,9 +129,11 @@ const Game = struct {
             .board = board,
             .active_piece = Game.spawn_piece(),
             .next_piece = Game.spawn_piece(),
+            .destroyed_lines = 0,
         };
     }
 
+    /// Return a random Piece to spawn
     fn spawn_piece() Piece {
         const piece_kind_to_spawn = rand_gen.enumValue(PieceKind);
         var piece_to_spawn: Piece = undefined;
@@ -186,6 +199,7 @@ const Game = struct {
         return piece_to_spawn;
     }
 
+    /// Check if a square is touching another square
     fn touch_other_square(self: Game, square: Square) bool {
         if (self.board[@intCast(square[0])][@intCast(square[1])].active == true) {
             return true;
@@ -225,6 +239,8 @@ const Game = struct {
         return true;
     }
 
+    /// Drop the active piece down by 1 slot, if it touches other squares or reaches the end of the board,
+    /// return an error
     pub fn gravity_active_piece(self: *Game) error{Touched}!void {
         // Check if the piece is touching other squares
         for (&self.active_piece.squares) |*square| {
@@ -243,6 +259,8 @@ const Game = struct {
         }
     }
 
+    /// Release the active piece, make it part of the board, set the active piece to the next piece and
+    /// spawn a new next piece
     pub fn release_active_piece(self: *Game) void {
         for (self.active_piece.squares) |square| {
             self.board[@intCast(square[0])][@intCast(square[1])] = .{
@@ -255,6 +273,7 @@ const Game = struct {
         self.next_piece = Game.spawn_piece();
     }
 
+    /// Move piece to the left or right based on the direction
     pub fn move_active_piece(self: *Game, direction: Direction) void {
         switch (direction) {
             .Left => {
@@ -274,6 +293,7 @@ const Game = struct {
         }
     }
 
+    /// Rotate the active piece clockwise or counterclockwise based on the direction
     pub fn rotate_active_piece(self: *Game, direction: Direction) void {
         switch (direction) {
             .Left => {
@@ -285,7 +305,7 @@ const Game = struct {
         }
     }
 
-    pub fn delete_full_rows_if_exists(self: *Game) u32 {
+    pub fn delete_full_rows_if_exists(self: *Game) void {
         var deleted_rows: u32 = 0;
 
         for (self.board, 0..) |rows, row| {
@@ -313,10 +333,20 @@ const Game = struct {
             }
         }
 
-        return deleted_rows;
+        self.destroyed_lines += deleted_rows;
     }
 
-    pub fn draw_on_window(self: Game) void {
+    pub fn check_game_over(self: Game) bool {
+        for (self.board[0]) |slot| {
+            if (slot.active == true) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    pub fn draw_on_window(self: Game, starting_x: usize) void {
         const ToDraw = struct {
             rect: rl.Rectangle,
             color: rl.Color,
@@ -324,12 +354,15 @@ const Game = struct {
         var to_draw: [TOTAL_ROWS][COLS]ToDraw = undefined;
 
         for (self.board, 0..) |rows, row| {
+            if (row < HIDDEN_ROWS) {
+                continue;
+            }
             for (rows, 0..) |square, col| {
                 if (square.active == true) {
                     to_draw[row][col] = .{
                         .rect = .{
-                            .x = @floatFromInt(col * SQUARE_SIZE),
-                            .y = @floatFromInt(row * SQUARE_SIZE),
+                            .x = @floatFromInt(col * SQUARE_SIZE + starting_x),
+                            .y = @floatFromInt(row * SQUARE_SIZE - HIDDEN_ROWS * SQUARE_SIZE),
                             .width = @floatFromInt(SQUARE_SIZE),
                             .height = @floatFromInt(SQUARE_SIZE),
                         },
@@ -348,8 +381,8 @@ const Game = struct {
 
         for (self.active_piece.squares) |square| {
             const rect: rl.Rectangle = .{
-                .x = @floatFromInt(square[1] * SQUARE_SIZE),
-                .y = @floatFromInt(square[0] * SQUARE_SIZE),
+                .x = @floatFromInt(@as(usize, @intCast(square[1] * SQUARE_SIZE)) + starting_x),
+                .y = @floatFromInt(square[0] * SQUARE_SIZE - HIDDEN_ROWS * SQUARE_SIZE),
                 .width = @floatFromInt(SQUARE_SIZE),
                 .height = @floatFromInt(SQUARE_SIZE),
             };
@@ -389,10 +422,12 @@ fn clear_terminal() void {
 }
 
 pub fn main() !void {
-    const screenWidth = COLS * SQUARE_SIZE;
-    const screenHeight = TOTAL_ROWS * SQUARE_SIZE;
-    const level = 1;
-    const level_delta = level * 10;
+    rand_prng = std.Random.DefaultPrng.init(curr_time());
+    rand_gen = rand_prng.random();
+    const screenWidth = COLS * SQUARE_SIZE + GUI_SIZE;
+    const screenHeight = ROWS * SQUARE_SIZE;
+    const level = 9;
+    const level_delta = (10 - level) * 10;
 
     rl.initWindow(screenWidth, screenHeight, "Tetrig");
     defer rl.closeWindow();
@@ -409,12 +444,22 @@ pub fn main() !void {
         if (rl.isKeyPressed(rl.KeyboardKey.key_left)) game.move_active_piece(Direction.Left);
         if (rl.isKeyPressed(rl.KeyboardKey.key_z)) game.rotate_active_piece(Direction.Left);
         if (rl.isKeyPressed(rl.KeyboardKey.key_x)) game.rotate_active_piece(Direction.Right);
+        if (rl.isKeyDown(rl.KeyboardKey.key_down)) {
+            if (gravity_wait > 1) {
+                gravity_wait -= 2;
+            }
+        }
 
         if (gravity_wait == 0) {
             gravity_wait = level_delta;
             game.gravity_active_piece() catch {
                 game.release_active_piece();
-                _ = game.delete_full_rows_if_exists();
+                game.delete_full_rows_if_exists();
+                const game_over = game.check_game_over();
+
+                if (game_over == true) {
+                    break;
+                }
             };
         }
 
@@ -423,7 +468,7 @@ pub fn main() !void {
         // clear_terminal();
         rl.beginDrawing();
         rl.clearBackground(rl.Color.ray_white);
-        game.draw_on_window();
+        game.draw_on_window(GUI_SIZE);
         rl.endDrawing();
     }
 }
