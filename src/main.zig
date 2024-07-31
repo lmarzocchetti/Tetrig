@@ -15,6 +15,7 @@ const HIDDEN_ROWS = 2;
 const TOTAL_ROWS = ROWS + HIDDEN_ROWS;
 const SQUARE_SIZE = 40;
 const GUI_SIZE = 300;
+const LINE_THICKNESS = 2.0;
 
 const Square = [2]i32;
 
@@ -113,6 +114,7 @@ const Game = struct {
     active_piece: Piece,
     next_piece: Piece,
     destroyed_lines: u32,
+    score: u32,
 
     /// Initialize the Game state with all empty slots
     pub fn init() Game {
@@ -130,6 +132,7 @@ const Game = struct {
             .active_piece = Game.spawn_piece(),
             .next_piece = Game.spawn_piece(),
             .destroyed_lines = 0,
+            .score = 0,
         };
     }
 
@@ -305,7 +308,18 @@ const Game = struct {
         }
     }
 
-    pub fn delete_full_rows_if_exists(self: *Game) void {
+    fn update_score(self: *Game, lines: u32, level: u32) void {
+        const score = switch (lines) {
+            1 => 40 * (level + 1),
+            2 => 100 * (level + 1),
+            3 => 300 * (level + 1),
+            4 => 1200 * (level + 1),
+            else => 0,
+        };
+        self.score += score;
+    }
+
+    pub fn delete_full_rows_if_exists(self: *Game) u32 {
         var deleted_rows: u32 = 0;
 
         for (self.board, 0..) |rows, row| {
@@ -334,6 +348,7 @@ const Game = struct {
         }
 
         self.destroyed_lines += deleted_rows;
+        return deleted_rows;
     }
 
     pub fn check_game_over(self: Game) bool {
@@ -375,7 +390,7 @@ const Game = struct {
         for (to_draw) |row| {
             for (row) |square| {
                 rl.drawRectangleRec(square.rect, square.color);
-                rl.drawRectangleLinesEx(square.rect, 2.0, rl.Color.black);
+                rl.drawRectangleLinesEx(square.rect, LINE_THICKNESS, rl.Color.black);
             }
         }
 
@@ -390,7 +405,7 @@ const Game = struct {
                 rect,
                 self.active_piece.kind.color(),
             );
-            rl.drawRectangleLinesEx(rect, 2.0, rl.Color.black);
+            rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
         }
     }
 
@@ -422,8 +437,13 @@ fn clear_terminal() void {
 }
 
 pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     rand_prng = std.Random.DefaultPrng.init(curr_time());
     rand_gen = rand_prng.random();
+
     const screenWidth = COLS * SQUARE_SIZE + GUI_SIZE;
     const screenHeight = ROWS * SQUARE_SIZE;
     const level = 9;
@@ -454,7 +474,8 @@ pub fn main() !void {
             gravity_wait = level_delta;
             game.gravity_active_piece() catch {
                 game.release_active_piece();
-                game.delete_full_rows_if_exists();
+                const deleted_rows = game.delete_full_rows_if_exists();
+                game.update_score(deleted_rows, level);
                 const game_over = game.check_game_over();
 
                 if (game_over == true) {
@@ -468,7 +489,44 @@ pub fn main() !void {
         // clear_terminal();
         rl.beginDrawing();
         rl.clearBackground(rl.Color.ray_white);
+
+        // Game Drawing
         game.draw_on_window(GUI_SIZE);
+
+        // GUI Drawing
+        rl.drawRectangleLinesEx(rl.Rectangle.init(0, 0, GUI_SIZE, screenHeight), 15, rl.Color.light_gray);
+        rl.drawText("Score:", 25, 50, 25, rl.Color.dark_gray);
+        var score_buf: [50]u8 = undefined;
+        const score_as_str = try std.fmt.bufPrint(&score_buf, "{}", .{game.score});
+        const score_as_str_z = try allocator.dupeZ(u8, score_as_str);
+        rl.drawText(score_as_str_z, 115, 51, 25, rl.Color.sky_blue);
+
+        rl.drawText("Del. Lines:", 25, 100, 25, rl.Color.dark_gray);
+        var del_buf: [50]u8 = undefined;
+        const del_as_str = try std.fmt.bufPrint(&del_buf, "{}", .{game.destroyed_lines});
+        const del_as_str_z = try allocator.dupeZ(u8, del_as_str);
+        rl.drawText(del_as_str_z, 155, 101, 25, rl.Color.sky_blue);
+
+        rl.drawText("Next Piece", 85, 420, 25, rl.Color.dark_gray);
+        const next_piece_color = game.next_piece.kind.color();
+        for (game.next_piece.squares) |square| {
+            var new_x: f32 = 0.0;
+            if (game.next_piece.kind == PieceKind.I) {
+                new_x = @floatFromInt(square[1] * SQUARE_SIZE - 85);
+            } else if (game.next_piece.kind == PieceKind.O) {
+                new_x = @floatFromInt(square[1] * SQUARE_SIZE - 50);
+            } else {
+                new_x = @floatFromInt(square[1] * SQUARE_SIZE - 70);
+            }
+            const rect: rl.Rectangle = .{
+                .x = new_x,
+                .y = @floatFromInt(square[0] * SQUARE_SIZE + 510),
+                .width = @floatFromInt(SQUARE_SIZE),
+                .height = @floatFromInt(SQUARE_SIZE),
+            };
+            rl.drawRectangleRec(rect, next_piece_color);
+            rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
+        }
         rl.endDrawing();
     }
 }
