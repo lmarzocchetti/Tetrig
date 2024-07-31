@@ -11,6 +11,7 @@ const COLS = 10;
 const ROWS = 20;
 const HIDDEN_ROWS = 2;
 const TOTAL_ROWS = ROWS + HIDDEN_ROWS;
+const SQUARE_SIZE = 40;
 
 const Square = [2]i32;
 
@@ -93,10 +94,10 @@ const Direction = enum {
 
 const Slot = struct {
     active: bool,
-    type: PieceKind,
+    type: ?PieceKind,
 };
 
-const Board = [TOTAL_ROWS][COLS]bool;
+const Board = [TOTAL_ROWS][COLS]Slot;
 
 const Game = struct {
     board: Board,
@@ -107,11 +108,10 @@ const Game = struct {
         var board: Board = undefined;
         for (board, 0..) |rows, row| {
             for (rows, 0..) |_, col| {
-                if (row == TOTAL_ROWS - 1) {
-                    board[row][col] = true;
-                } else {
-                    board[row][col] = false;
-                }
+                board[row][col] = .{
+                    .active = false,
+                    .type = null,
+                };
             }
         }
         return Game{
@@ -187,7 +187,7 @@ const Game = struct {
     }
 
     fn touch_other_square(self: Game, square: Square) bool {
-        if (self.board[@intCast(square[0])][@intCast(square[1])] == true) {
+        if (self.board[@intCast(square[0])][@intCast(square[1])].active == true) {
             return true;
         }
         return false;
@@ -229,7 +229,13 @@ const Game = struct {
         // Check if the piece is touching other squares
         for (&self.active_piece.squares) |*square| {
             const next = [2]i32{ square[0] + 1, square[1] };
-            if (next[0] == -1 or self.touch_other_square(next)) return error.Touched;
+            if (next[0] == TOTAL_ROWS) {
+                return error.Touched;
+            }
+
+            if (self.touch_other_square(next)) {
+                return error.Touched;
+            }
         }
 
         for (&self.active_piece.squares) |*square| {
@@ -239,7 +245,10 @@ const Game = struct {
 
     pub fn release_active_piece(self: *Game) void {
         for (self.active_piece.squares) |square| {
-            self.board[@intCast(square[0])][@intCast(square[1])] = true;
+            self.board[@intCast(square[0])][@intCast(square[1])] = .{
+                .active = true,
+                .type = self.active_piece.kind,
+            };
         }
 
         self.active_piece = self.next_piece;
@@ -276,14 +285,86 @@ const Game = struct {
         }
     }
 
+    pub fn delete_full_rows_if_exists(self: *Game) u32 {
+        var deleted_rows: u32 = 0;
+
+        for (self.board, 0..) |rows, row| {
+            var full_row = true;
+
+            // Check if the row is full
+            for (rows) |square| {
+                if (square.active == false) {
+                    full_row = false;
+                    break;
+                }
+            }
+
+            // Delete the row
+            if (full_row == true) {
+                deleted_rows += 1;
+
+                var row_start = row;
+                while (row_start > 0) {
+                    for (self.board[row_start], 0..) |_, col| {
+                        self.board[row_start][col] = self.board[row_start - 1][col];
+                    }
+                    row_start -= 1;
+                }
+            }
+        }
+
+        return deleted_rows;
+    }
+
     pub fn draw_on_window(self: Game) void {
-        _ = self; // autofix
+        const ToDraw = struct {
+            rect: rl.Rectangle,
+            color: rl.Color,
+        };
+        var to_draw: [TOTAL_ROWS][COLS]ToDraw = undefined;
+
+        for (self.board, 0..) |rows, row| {
+            for (rows, 0..) |square, col| {
+                if (square.active == true) {
+                    to_draw[row][col] = .{
+                        .rect = .{
+                            .x = @floatFromInt(col * SQUARE_SIZE),
+                            .y = @floatFromInt(row * SQUARE_SIZE),
+                            .width = @floatFromInt(SQUARE_SIZE),
+                            .height = @floatFromInt(SQUARE_SIZE),
+                        },
+                        .color = square.type.?.color(),
+                    };
+                }
+            }
+        }
+
+        for (to_draw) |row| {
+            for (row) |square| {
+                rl.drawRectangleRec(square.rect, square.color);
+                rl.drawRectangleLinesEx(square.rect, 2.0, rl.Color.black);
+            }
+        }
+
+        for (self.active_piece.squares) |square| {
+            const rect: rl.Rectangle = .{
+                .x = @floatFromInt(square[1] * SQUARE_SIZE),
+                .y = @floatFromInt(square[0] * SQUARE_SIZE),
+                .width = @floatFromInt(SQUARE_SIZE),
+                .height = @floatFromInt(SQUARE_SIZE),
+            };
+            rl.drawRectangleRec(
+                rect,
+                self.active_piece.kind.color(),
+            );
+            rl.drawRectangleLinesEx(rect, 2.0, rl.Color.black);
+        }
     }
 
     pub fn print(self: Game) void {
         for (self.board, 0..) |rows, row| {
             for (rows, 0..) |square, col| {
-                if (square == false) {
+                if (square.active == false) {
                     var square_printed = false;
                     for (self.active_piece.squares) |piece_square| {
                         if (piece_square[0] == row and piece_square[1] == col) {
@@ -308,33 +389,41 @@ fn clear_terminal() void {
 }
 
 pub fn main() !void {
-    const screenWidth = 800;
-    const screenHeight = 450;
+    const screenWidth = COLS * SQUARE_SIZE;
+    const screenHeight = TOTAL_ROWS * SQUARE_SIZE;
+    const level = 1;
+    const level_delta = level * 10;
 
     rl.initWindow(screenWidth, screenHeight, "Tetrig");
     defer rl.closeWindow();
-    rl.setTargetFPS(30);
+    rl.setTargetFPS(60);
 
     var game = Game.init();
 
+    var gravity_wait: u32 = level_delta;
     while (!rl.windowShouldClose()) {
-        clear_terminal();
+        gravity_wait -= 1;
 
         // Key Handling
-        if (rl.isKeyDown(rl.KeyboardKey.key_right)) game.move_active_piece(Direction.Right);
-        if (rl.isKeyDown(rl.KeyboardKey.key_left)) game.move_active_piece(Direction.Left);
-        if (rl.isKeyDown(rl.KeyboardKey.key_z)) game.rotate_active_piece(Direction.Left);
-        if (rl.isKeyDown(rl.KeyboardKey.key_x)) game.rotate_active_piece(Direction.Right);
+        if (rl.isKeyPressed(rl.KeyboardKey.key_right)) game.move_active_piece(Direction.Right);
+        if (rl.isKeyPressed(rl.KeyboardKey.key_left)) game.move_active_piece(Direction.Left);
+        if (rl.isKeyPressed(rl.KeyboardKey.key_z)) game.rotate_active_piece(Direction.Left);
+        if (rl.isKeyPressed(rl.KeyboardKey.key_x)) game.rotate_active_piece(Direction.Right);
 
-        // Draw
-        game.print();
-        std.time.sleep(300_000_000); // 1_000_000_000
-        game.gravity_active_piece() catch {
-            game.release_active_piece();
-        };
+        if (gravity_wait == 0) {
+            gravity_wait = level_delta;
+            game.gravity_active_piece() catch {
+                game.release_active_piece();
+                _ = game.delete_full_rows_if_exists();
+            };
+        }
 
+        // game.print();
+        // std.time.sleep(300_000_000); // 1_000_000_000
+        // clear_terminal();
         rl.beginDrawing();
         rl.clearBackground(rl.Color.ray_white);
+        game.draw_on_window();
         rl.endDrawing();
     }
 }
