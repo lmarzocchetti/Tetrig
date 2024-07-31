@@ -408,33 +408,7 @@ const Game = struct {
             rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
         }
     }
-
-    pub fn print(self: Game) void {
-        for (self.board, 0..) |rows, row| {
-            for (rows, 0..) |square, col| {
-                if (square.active == false) {
-                    var square_printed = false;
-                    for (self.active_piece.squares) |piece_square| {
-                        if (piece_square[0] == row and piece_square[1] == col) {
-                            std.debug.print("X", .{});
-                            square_printed = true;
-                        }
-                    }
-                    if (square_printed == false) {
-                        std.debug.print(" ", .{});
-                    }
-                } else {
-                    std.debug.print("X", .{});
-                }
-            }
-            std.debug.print("\n", .{});
-        }
-    }
 };
-
-fn clear_terminal() void {
-    std.debug.print("\x1B[2J\x1B[H", .{});
-}
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -484,9 +458,6 @@ pub fn main() !void {
             };
         }
 
-        // game.print();
-        // std.time.sleep(300_000_000); // 1_000_000_000
-        // clear_terminal();
         rl.beginDrawing();
         rl.clearBackground(rl.Color.ray_white);
 
@@ -494,39 +465,46 @@ pub fn main() !void {
         game.draw_on_window(GUI_SIZE);
 
         // GUI Drawing
-        rl.drawRectangleLinesEx(rl.Rectangle.init(0, 0, GUI_SIZE, screenHeight), 15, rl.Color.light_gray);
-        rl.drawText("Score:", 25, 50, 25, rl.Color.dark_gray);
-        var score_buf: [50]u8 = undefined;
-        const score_as_str = try std.fmt.bufPrint(&score_buf, "{}", .{game.score});
-        const score_as_str_z = try allocator.dupeZ(u8, score_as_str);
-        rl.drawText(score_as_str_z, 115, 51, 25, rl.Color.sky_blue);
+        {
+            rl.drawRectangleLinesEx(rl.Rectangle.init(0, 0, GUI_SIZE, screenHeight), 15, rl.Color.light_gray);
 
-        rl.drawText("Del. Lines:", 25, 100, 25, rl.Color.dark_gray);
-        var del_buf: [50]u8 = undefined;
-        const del_as_str = try std.fmt.bufPrint(&del_buf, "{}", .{game.destroyed_lines});
-        const del_as_str_z = try allocator.dupeZ(u8, del_as_str);
-        rl.drawText(del_as_str_z, 155, 101, 25, rl.Color.sky_blue);
+            // Score text and value
+            rl.drawText("Score:", 25, 50, 25, rl.Color.dark_gray);
+            var score_buf: [50]u8 = undefined;
+            const score_as_str = try std.fmt.bufPrint(&score_buf, "{}", .{game.score});
+            const score_as_str_z = try allocator.dupeZ(u8, score_as_str);
+            rl.drawText(score_as_str_z, 115, 51, 25, rl.Color.sky_blue);
 
-        rl.drawText("Next Piece", 85, 420, 25, rl.Color.dark_gray);
-        const next_piece_color = game.next_piece.kind.color();
-        for (game.next_piece.squares) |square| {
-            var new_x: f32 = 0.0;
-            if (game.next_piece.kind == PieceKind.I) {
-                new_x = @floatFromInt(square[1] * SQUARE_SIZE - 85);
-            } else if (game.next_piece.kind == PieceKind.O) {
-                new_x = @floatFromInt(square[1] * SQUARE_SIZE - 50);
-            } else {
-                new_x = @floatFromInt(square[1] * SQUARE_SIZE - 70);
+            // Deleted Lines text and value
+            rl.drawText("Del. Lines:", 25, 100, 25, rl.Color.dark_gray);
+            var del_buf: [50]u8 = undefined;
+            const del_as_str = try std.fmt.bufPrint(&del_buf, "{}", .{game.destroyed_lines});
+            const del_as_str_z = try allocator.dupeZ(u8, del_as_str);
+            rl.drawText(del_as_str_z, 155, 101, 25, rl.Color.sky_blue);
+
+            // Next Piece text and new piece
+            rl.drawText("Next Piece", 85, 420, 25, rl.Color.dark_gray);
+            const next_piece_color = game.next_piece.kind.color();
+            for (game.next_piece.squares) |square| {
+                var new_x: f32 = 0.0;
+                if (game.next_piece.kind == PieceKind.I) {
+                    new_x = @floatFromInt(square[1] * SQUARE_SIZE - 85);
+                } else if (game.next_piece.kind == PieceKind.O) {
+                    new_x = @floatFromInt(square[1] * SQUARE_SIZE - 50);
+                } else {
+                    new_x = @floatFromInt(square[1] * SQUARE_SIZE - 70);
+                }
+                const rect: rl.Rectangle = .{
+                    .x = new_x,
+                    .y = @floatFromInt(square[0] * SQUARE_SIZE + 510),
+                    .width = @floatFromInt(SQUARE_SIZE),
+                    .height = @floatFromInt(SQUARE_SIZE),
+                };
+                rl.drawRectangleRec(rect, next_piece_color);
+                rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
             }
-            const rect: rl.Rectangle = .{
-                .x = new_x,
-                .y = @floatFromInt(square[0] * SQUARE_SIZE + 510),
-                .width = @floatFromInt(SQUARE_SIZE),
-                .height = @floatFromInt(SQUARE_SIZE),
-            };
-            rl.drawRectangleRec(rect, next_piece_color);
-            rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
         }
+
         rl.endDrawing();
     }
 }
