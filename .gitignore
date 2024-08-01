@@ -3,4 +3,4 @@
 .zig-cache/
 zig-out/
 
-resources/
+resources/music/theme_b.mp3

@@ -428,6 +428,13 @@ pub fn main() !void {
     defer rl.closeWindow();
     rl.setTargetFPS(60);
 
+    rl.initAudioDevice();
+    defer rl.closeAudioDevice();
+
+    const theme: rl.Sound = rl.loadSound("resources/music/theme_a_drill.ogg");
+    defer rl.unloadSound(theme);
+    rl.playSound(theme);
+
     var game = Game.init();
 
     var gravity_wait: u32 = level_delta;
