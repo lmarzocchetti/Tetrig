@@ -115,6 +115,7 @@ const Game = struct {
     next_piece: Piece,
     destroyed_lines: u32,
     score: u32,
+    best_score: u32,
 
     /// Initialize the Game state with all empty slots
     pub fn init() Game {
@@ -133,7 +134,20 @@ const Game = struct {
             .next_piece = Game.spawn_piece(),
             .destroyed_lines = 0,
             .score = 0,
+            .best_score = 0,
         };
+    }
+
+    pub fn reset(self: *Game) void {
+        const to_copy = Game.init();
+        self.board = to_copy.board;
+        self.active_piece = to_copy.active_piece;
+        self.next_piece = to_copy.next_piece;
+        self.destroyed_lines = 0;
+        if (self.score > self.best_score) {
+            self.best_score = self.score;
+        }
+        self.score = 0;
     }
 
     /// Return a random Piece to spawn
@@ -408,6 +422,7 @@ pub fn main() !void {
     const screenHeight = ROWS * SQUARE_SIZE;
     const level = 7;
     const level_delta = (10 - level) * 5;
+    var game_over: bool = false;
 
     rl.initWindow(screenWidth, screenHeight, "Tetrig");
     defer rl.closeWindow();
@@ -429,6 +444,10 @@ pub fn main() !void {
                 gravity_wait -= 2;
             }
         }
+        if (rl.isKeyPressed(rl.KeyboardKey.key_r)) {
+            game.reset();
+            game_over = false;
+        }
 
         if (gravity_wait == 0) {
             gravity_wait = level_delta;
@@ -436,59 +455,70 @@ pub fn main() !void {
                 game.release_active_piece();
                 const deleted_rows = game.delete_full_rows_if_exists();
                 game.update_score(deleted_rows, level);
-                const game_over = game.check_game_over();
-
-                if (game_over == true) {
-                    break;
-                }
+                game_over = game.check_game_over();
             };
         }
 
         rl.beginDrawing();
-        rl.clearBackground(rl.Color.ray_white);
+        if (game_over == false) {
+            rl.clearBackground(rl.Color.ray_white);
 
-        // Game Drawing
-        game.draw_on_window(GUI_SIZE);
+            // Game Drawing
+            game.draw_on_window(GUI_SIZE);
 
-        // GUI Drawing
-        {
-            rl.drawRectangleLinesEx(rl.Rectangle.init(0, 0, GUI_SIZE, screenHeight), 15, rl.Color.light_gray);
+            // GUI Drawing
+            {
+                rl.drawRectangleLinesEx(rl.Rectangle.init(0, 0, GUI_SIZE, screenHeight), 15, rl.Color.light_gray);
 
-            // Score text and value
-            rl.drawText("Score:", 25, 50, 25, rl.Color.dark_gray);
-            var score_buf: [50]u8 = undefined;
-            const score_as_str = try std.fmt.bufPrint(&score_buf, "{}", .{game.score});
-            const score_as_str_z = try allocator.dupeZ(u8, score_as_str);
-            rl.drawText(score_as_str_z, 115, 51, 25, rl.Color.sky_blue);
+                // Score text and value
+                rl.drawText("Score:", 25, 50, 25, rl.Color.dark_gray);
+                var score_buf: [50]u8 = undefined;
+                const score_as_str = try std.fmt.bufPrint(&score_buf, "{}", .{game.score});
+                const score_as_str_z = try allocator.dupeZ(u8, score_as_str);
+                rl.drawText(score_as_str_z, 110, 51, 25, rl.Color.sky_blue);
 
-            // Deleted Lines text and value
-            rl.drawText("Del. Lines:", 25, 100, 25, rl.Color.dark_gray);
-            var del_buf: [50]u8 = undefined;
-            const del_as_str = try std.fmt.bufPrint(&del_buf, "{}", .{game.destroyed_lines});
-            const del_as_str_z = try allocator.dupeZ(u8, del_as_str);
-            rl.drawText(del_as_str_z, 155, 101, 25, rl.Color.sky_blue);
+                // Best Score text and value
+                rl.drawText("Best Score:", 25, 100, 25, rl.Color.dark_gray);
+                var best_buf: [50]u8 = undefined;
+                const best_as_str = try std.fmt.bufPrint(&best_buf, "{}", .{game.best_score});
+                const best_as_str_z = try allocator.dupeZ(u8, best_as_str);
+                rl.drawText(best_as_str_z, 175, 101, 25, rl.Color.sky_blue);
 
-            // Next Piece text and new piece
-            rl.drawText("Next Piece", 85, 420, 25, rl.Color.dark_gray);
-            const next_piece_color = game.next_piece.kind.color();
-            for (game.next_piece.squares) |square| {
-                var new_x: f32 = 0.0;
-                if (game.next_piece.kind == PieceKind.I) {
-                    new_x = @floatFromInt(square[1] * SQUARE_SIZE - 85);
-                } else if (game.next_piece.kind == PieceKind.O) {
-                    new_x = @floatFromInt(square[1] * SQUARE_SIZE - 50);
-                } else {
-                    new_x = @floatFromInt(square[1] * SQUARE_SIZE - 70);
+                // Deleted Lines text and value
+                rl.drawText("Del. Lines:", 25, 150, 25, rl.Color.dark_gray);
+                var del_buf: [50]u8 = undefined;
+                const del_as_str = try std.fmt.bufPrint(&del_buf, "{}", .{game.destroyed_lines});
+                const del_as_str_z = try allocator.dupeZ(u8, del_as_str);
+                rl.drawText(del_as_str_z, 150, 151, 25, rl.Color.sky_blue);
+
+                // Next Piece text and new piece
+                rl.drawText("Next Piece", 85, 420, 25, rl.Color.dark_gray);
+                const next_piece_color = game.next_piece.kind.color();
+                for (game.next_piece.squares) |square| {
+                    var new_x: f32 = 0.0;
+                    if (game.next_piece.kind == PieceKind.I) {
+                        new_x = @floatFromInt(square[1] * SQUARE_SIZE - 85);
+                    } else if (game.next_piece.kind == PieceKind.O) {
+                        new_x = @floatFromInt(square[1] * SQUARE_SIZE - 50);
+                    } else {
+                        new_x = @floatFromInt(square[1] * SQUARE_SIZE - 70);
+                    }
+                    const rect: rl.Rectangle = .{
+                        .x = new_x,
+                        .y = @floatFromInt(square[0] * SQUARE_SIZE + 510),
+                        .width = @floatFromInt(SQUARE_SIZE),
+                        .height = @floatFromInt(SQUARE_SIZE),
+                    };
+                    rl.drawRectangleRec(rect, next_piece_color);
+                    rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
                 }
-                const rect: rl.Rectangle = .{
-                    .x = new_x,
-                    .y = @floatFromInt(square[0] * SQUARE_SIZE + 510),
-                    .width = @floatFromInt(SQUARE_SIZE),
-                    .height = @floatFromInt(SQUARE_SIZE),
-                };
-                rl.drawRectangleRec(rect, next_piece_color);
-                rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
             }
+        } else {
+            rl.beginDrawing();
+            rl.drawText("Si pers fra :(", screenWidth / 4, screenHeight / 3, 30, rl.Color.dark_blue);
+            rl.drawText("Schiaccj lu tast R per continua'", screenWidth / 4, screenHeight / 3 + 40, 25, rl.Color.lime);
+            rl.endDrawing();
+            continue;
         }
 
         rl.endDrawing();
