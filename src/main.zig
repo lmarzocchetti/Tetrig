@@ -446,6 +446,7 @@ pub fn main() !void {
         if (rl.isKeyPressed(rl.KeyboardKey.key_left)) game.move_active_piece(Direction.Left);
         if (rl.isKeyPressed(rl.KeyboardKey.key_z)) game.rotate_active_piece(Direction.Left);
         if (rl.isKeyPressed(rl.KeyboardKey.key_x)) game.rotate_active_piece(Direction.Right);
+        if (rl.isKeyPressed(rl.KeyboardKey.key_m)) if (rl.isSoundPlaying(theme)) rl.pauseSound(theme) else rl.resumeSound(theme);
         if (rl.isKeyDown(rl.KeyboardKey.key_down)) {
             if (gravity_wait > 1) {
                 gravity_wait -= 2;
