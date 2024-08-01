@@ -362,35 +362,21 @@ const Game = struct {
     }
 
     pub fn draw_on_window(self: Game, starting_x: usize) void {
-        const ToDraw = struct {
-            rect: rl.Rectangle,
-            color: rl.Color,
-        };
-        var to_draw: [TOTAL_ROWS][COLS]ToDraw = undefined;
-
         for (self.board, 0..) |rows, row| {
             if (row < HIDDEN_ROWS) {
                 continue;
             }
             for (rows, 0..) |square, col| {
                 if (square.active == true) {
-                    to_draw[row][col] = .{
-                        .rect = .{
-                            .x = @floatFromInt(col * SQUARE_SIZE + starting_x),
-                            .y = @floatFromInt(row * SQUARE_SIZE - HIDDEN_ROWS * SQUARE_SIZE),
-                            .width = @floatFromInt(SQUARE_SIZE),
-                            .height = @floatFromInt(SQUARE_SIZE),
-                        },
-                        .color = square.type.?.color(),
+                    const to_draw: rl.Rectangle = .{
+                        .x = @floatFromInt(col * SQUARE_SIZE + starting_x),
+                        .y = @floatFromInt(row * SQUARE_SIZE - HIDDEN_ROWS * SQUARE_SIZE), // - HIDDEN_ROWS * SQUARE_SIZE),
+                        .width = @floatFromInt(SQUARE_SIZE),
+                        .height = @floatFromInt(SQUARE_SIZE),
                     };
+                    rl.drawRectangleRec(to_draw, square.type.?.color());
+                    rl.drawRectangleLinesEx(to_draw, LINE_THICKNESS, rl.Color.black);
                 }
-            }
-        }
-
-        for (to_draw) |row| {
-            for (row) |square| {
-                rl.drawRectangleRec(square.rect, square.color);
-                rl.drawRectangleLinesEx(square.rect, LINE_THICKNESS, rl.Color.black);
             }
         }
 
