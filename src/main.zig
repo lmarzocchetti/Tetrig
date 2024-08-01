@@ -406,8 +406,8 @@ pub fn main() !void {
 
     const screenWidth = COLS * SQUARE_SIZE + GUI_SIZE;
     const screenHeight = ROWS * SQUARE_SIZE;
-    const level = 9;
-    const level_delta = (10 - level) * 10;
+    const level = 7;
+    const level_delta = (10 - level) * 5;
 
     rl.initWindow(screenWidth, screenHeight, "Tetrig");
     defer rl.closeWindow();
