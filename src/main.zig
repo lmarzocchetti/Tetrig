@@ -441,6 +441,9 @@ pub fn main() !void {
     while (!rl.windowShouldClose()) {
         gravity_wait -= 1;
 
+        // Audio
+        if (!rl.isSoundPlaying(theme)) rl.playSound(theme);
+
         // Key Handling
         if (rl.isKeyPressed(rl.KeyboardKey.key_right)) game.move_active_piece(Direction.Right);
         if (rl.isKeyPressed(rl.KeyboardKey.key_left)) game.move_active_piece(Direction.Left);
