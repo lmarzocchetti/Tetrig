@@ -431,7 +431,7 @@ pub fn main() !void {
     rl.initAudioDevice();
     defer rl.closeAudioDevice();
 
-    const theme: rl.Sound = rl.loadSound("resources/music/theme_a_drill.ogg");
+    const theme: rl.Sound = try rl.loadSound("resources/music/theme_a_drill.ogg");
     defer rl.unloadSound(theme);
     rl.playSound(theme);
 
@@ -445,17 +445,17 @@ pub fn main() !void {
         if (!rl.isSoundPlaying(theme)) rl.playSound(theme);
 
         // Key Handling
-        if (rl.isKeyPressed(rl.KeyboardKey.key_right)) game.move_active_piece(Direction.Right);
-        if (rl.isKeyPressed(rl.KeyboardKey.key_left)) game.move_active_piece(Direction.Left);
-        if (rl.isKeyPressed(rl.KeyboardKey.key_z)) game.rotate_active_piece(Direction.Left);
-        if (rl.isKeyPressed(rl.KeyboardKey.key_x)) game.rotate_active_piece(Direction.Right);
-        if (rl.isKeyPressed(rl.KeyboardKey.key_m)) if (rl.isSoundPlaying(theme)) rl.pauseSound(theme) else rl.resumeSound(theme);
-        if (rl.isKeyDown(rl.KeyboardKey.key_down)) {
+        if (rl.isKeyPressed(rl.KeyboardKey.right)) game.move_active_piece(Direction.Right);
+        if (rl.isKeyPressed(rl.KeyboardKey.left)) game.move_active_piece(Direction.Left);
+        if (rl.isKeyPressed(rl.KeyboardKey.z)) game.rotate_active_piece(Direction.Left);
+        if (rl.isKeyPressed(rl.KeyboardKey.x)) game.rotate_active_piece(Direction.Right);
+        if (rl.isKeyPressed(rl.KeyboardKey.m)) if (rl.isSoundPlaying(theme)) rl.pauseSound(theme) else rl.resumeSound(theme);
+        if (rl.isKeyDown(rl.KeyboardKey.down)) {
             if (gravity_wait > 1) {
                 gravity_wait -= 2;
             }
         }
-        if (rl.isKeyPressed(rl.KeyboardKey.key_r)) {
+        if (rl.isKeyPressed(rl.KeyboardKey.r)) {
             game.reset();
             game_over = false;
         }
