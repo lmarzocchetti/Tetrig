@@ -24,6 +24,7 @@ Play!
 - Left and Right key -> Move the piece
 - Down key -> Speed up the piece
 - m -> Mute/Unmute the music
+- r -> Restart the game
 
 ### Further update
 1. Level selection
