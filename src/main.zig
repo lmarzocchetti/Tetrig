@@ -375,7 +375,10 @@ const Game = struct {
         return false;
     }
 
-    pub fn draw_on_window(self: Game, starting_x: usize) void {
+    pub fn draw_on_window(self: Game, starting_x: usize, shader: rl.Shader, delta_time: f32) void {
+        const shader_loc = rl.getShaderLocation(shader, "time");
+        rl.setShaderValue(shader, shader_loc, &delta_time, rl.ShaderUniformDataType.float);
+
         for (self.board, 0..) |rows, row| {
             if (row < HIDDEN_ROWS) {
                 continue;
@@ -388,8 +391,13 @@ const Game = struct {
                         .width = @floatFromInt(SQUARE_SIZE),
                         .height = @floatFromInt(SQUARE_SIZE),
                     };
+
+                    rl.beginShaderMode(shader);
+
                     rl.drawRectangleRec(to_draw, square.type.?.color());
                     rl.drawRectangleLinesEx(to_draw, LINE_THICKNESS, rl.Color.black);
+
+                    rl.endShaderMode();
                 }
             }
         }
@@ -401,10 +409,14 @@ const Game = struct {
                 .width = @floatFromInt(SQUARE_SIZE),
                 .height = @floatFromInt(SQUARE_SIZE),
             };
+
+            rl.beginShaderMode(shader);
             rl.drawRectangleRec(
                 rect,
                 self.active_piece.kind.color(),
             );
+            rl.endShaderMode();
+
             rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
         }
     }
@@ -435,7 +447,12 @@ pub fn main() !void {
     defer rl.unloadSound(theme);
     rl.playSound(theme);
 
+    const square_shader: rl.Shader = try rl.loadShader(null, "resources/shaders/glow_square.glsl");
+    defer rl.unloadShader(square_shader);
+
     var game = Game.init();
+
+    var delta_time: f32 = 0.0;
 
     var gravity_wait: u32 = level_delta;
     while (!rl.windowShouldClose()) {
@@ -475,7 +492,7 @@ pub fn main() !void {
             rl.clearBackground(rl.Color.ray_white);
 
             // Game Drawing
-            game.draw_on_window(GUI_SIZE);
+            game.draw_on_window(GUI_SIZE, square_shader, delta_time);
 
             // GUI Drawing
             {
@@ -520,6 +537,7 @@ pub fn main() !void {
                         .width = @floatFromInt(SQUARE_SIZE),
                         .height = @floatFromInt(SQUARE_SIZE),
                     };
+
                     rl.drawRectangleRec(rect, next_piece_color);
                     rl.drawRectangleLinesEx(rect, LINE_THICKNESS, rl.Color.black);
                 }
@@ -533,5 +551,6 @@ pub fn main() !void {
         }
 
         rl.endDrawing();
+        delta_time += rl.getFrameTime();
     }
 }
